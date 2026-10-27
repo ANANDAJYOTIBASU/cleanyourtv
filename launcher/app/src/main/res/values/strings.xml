@@ -39,6 +39,11 @@
     <string name="stats_cpu">CPU %1$d%%</string>
     <string name="stats_memory">Memory %1$d / %2$d MB</string>
     <string name="stats_storage">Storage %1$s free</string>
+    <string name="stats_bar_memory" translatable="false">Memory</string>
+    <string name="stats_bar_storage" translatable="false">Storage</string>
+    <string name="stats_bar_percent" translatable="false">%1$d%%</string>
+    <string name="keep_watching" translatable="false">Keep watching</string>
+    <string name="more_apps" translatable="false">All apps</string>
     <string name="storage_gb_whole">%1$.0f GB</string>
     <string name="storage_gb_decimal">%1$.1f GB</string>
     <string name="dream_name">Clock</string>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Antonio at weight 150, for hero_clock's tall condensed digits. Antonio (SIL Open Font License 1.1, see
+     launcher/FONT-LICENSE-ANTONIO-OFL.txt) is a variable font, built once per process like outfit_extralight. -->
+<font-family xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <font
+        android:font="@font/antonio"
+        android:fontStyle="normal"
+        android:fontWeight="150"
+        android:fontVariationSettings="'wght' 150"
+        tools:targetApi="28" />
+</font-family>

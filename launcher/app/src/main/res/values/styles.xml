@@ -53,4 +53,35 @@
         <item name="android:layout_marginEnd">10dp</item>
         <item name="android:gravity">center</item>
     </style>
+
+    <!-- stats_bars: a small caps label, a thin bar and its percentage. -->
+    <style name="StatsBarLabel">
+        <item name="android:layout_width">72dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:textColor">#B3FFFFFF</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">@string/font_medium</item>
+        <item name="android:letterSpacing">0.16</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+    <style name="StatsBar" parent="@android:style/Widget.Material.ProgressBar.Horizontal">
+        <item name="android:layout_width">120dp</item>
+        <item name="android:layout_height">4dp</item>
+        <item name="android:minHeight">4dp</item>
+        <item name="android:maxHeight">4dp</item>
+        <item name="android:max">100</item>
+        <item name="android:indeterminate">false</item>
+        <item name="android:progressDrawable">@drawable/stats_bar</item>
+    </style>
+    <style name="StatsBarValue">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:minWidth">38dp</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:textColor">#F2FFFFFF</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:fontFamily">@string/font_medium</item>
+    </style>
 </resources>

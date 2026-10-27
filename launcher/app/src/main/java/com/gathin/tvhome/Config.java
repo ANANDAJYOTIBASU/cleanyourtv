@@ -139,6 +139,24 @@ final class Config {
     final boolean showHomeSettingsShortcut;
     /** One line under the clock: CPU, free memory, free storage. Off unless config or a theme turns it on. */
     final boolean showStats;
+    /** Memory and storage as two bars left of the top-right buttons, replacing the stats line (stats_bars). */
+    final boolean statsBars;
+    /** A large centred clock with the date above it instead of the top-left clock (hero_clock). */
+    final boolean heroClock;
+    /** With heroClock, each wallpaper's .depth.png cut-out drawn over the clock (depth_effect). */
+    final boolean depthEffect;
+    /** false hides the top-right buttons (top_buttons). */
+    final boolean topButtons;
+    /** With statsBars, false leaves only the memory bar (stats_storage_bar). */
+    final boolean statsStorageBar;
+    /** With singleRow, apps as rounded squares filled with their icons (square_tiles). */
+    final boolean squareTiles;
+    /** With singleRow, a Settings tile and a "..." tile end the row (row_end_tiles). */
+    final boolean rowEndTiles;
+    /** The Continue watching row above the dock, with posters from the internet (keep_watching). */
+    final boolean keepWatching;
+    /** With heroClock, the current temperature after the date, from Open-Meteo (weather). */
+    final boolean weather;
     /** App library pill after the last Home row (config.xml app_library). */
     final boolean appLibrary;
     /** OK directly toggles Home membership in the library (app_library_selection). */
@@ -270,7 +288,18 @@ final class Config {
                    List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, boolean ambientGlow, boolean appGlow, boolean fadeRows, int homeIdleClockMinutes,
                    boolean keyFilter, boolean dockGlass, String glowStyle, boolean wallpaperCaptions,
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
-                   Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways) {
+                   Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways,
+                   boolean statsBars, boolean heroClock, boolean depthEffect, boolean topButtons, boolean statsStorageBar,
+                   boolean squareTiles, boolean rowEndTiles, boolean keepWatching, boolean weather) {
+        this.weather = weather;
+        this.statsBars = statsBars;
+        this.heroClock = heroClock;
+        this.depthEffect = depthEffect;
+        this.topButtons = topButtons;
+        this.statsStorageBar = statsStorageBar;
+        this.squareTiles = squareTiles;
+        this.rowEndTiles = rowEndTiles;
+        this.keepWatching = keepWatching;
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -448,6 +477,15 @@ final class Config {
         String vpn = res.getString(R.string.vpn_app).trim();
         boolean homeSettings = res.getBoolean(R.bool.show_home_settings_shortcut);
         boolean showStats = res.getBoolean(R.bool.show_stats);
+        boolean statsBars = res.getBoolean(R.bool.stats_bars);
+        boolean heroClock = res.getBoolean(R.bool.hero_clock);
+        boolean depthEffect = res.getBoolean(R.bool.depth_effect);
+        boolean topButtons = res.getBoolean(R.bool.top_buttons);
+        boolean statsStorageBar = res.getBoolean(R.bool.stats_storage_bar);
+        boolean squareTiles = res.getBoolean(R.bool.square_tiles);
+        boolean rowEndTiles = res.getBoolean(R.bool.row_end_tiles);
+        boolean keepWatching = res.getBoolean(R.bool.keep_watching);
+        boolean weather = res.getBoolean(R.bool.weather);
         boolean library = res.getBoolean(R.bool.app_library);
         boolean librarySelection = res.getBoolean(R.bool.app_library_selection);
         boolean libraryOkOpens = res.getBoolean(R.bool.library_ok_opens);
@@ -520,7 +558,7 @@ final class Config {
             inputAction = string(json, "input_action", inputAction);
             inputSources = stringList(json, "input_sources", inputSources);
             inputUriScheme = string(json, "input_uri_scheme", inputUriScheme).trim();
-            columns = integer(json, "columns", columns, 1, 8);
+            columns = integer(json, "columns", columns, 1, 16);
             rowsBelow = integer(json, "rows_below_dock", rowsBelow, 0, 3);
             animations = bool(json, "animations", animations);
             advancedEffects = bool(json, "advanced_effects", advancedEffects);
@@ -552,6 +590,15 @@ final class Config {
             vpn = string(json, "vpn_app", vpn);
             homeSettings = bool(json, "show_home_settings_shortcut", homeSettings);
             showStats = bool(json, "show_stats", showStats);
+            statsBars = bool(json, "stats_bars", statsBars);
+            heroClock = bool(json, "hero_clock", heroClock);
+            depthEffect = bool(json, "depth_effect", depthEffect);
+            topButtons = bool(json, "top_buttons", topButtons);
+            statsStorageBar = bool(json, "stats_storage_bar", statsStorageBar);
+            squareTiles = bool(json, "square_tiles", squareTiles);
+            rowEndTiles = bool(json, "row_end_tiles", rowEndTiles);
+            keepWatching = bool(json, "keep_watching", keepWatching);
+            weather = bool(json, "weather", weather);
             library = bool(json, "app_library", library);
             librarySelection = bool(json, "app_library_selection", librarySelection);
             libraryOkOpens = bool(json, "library_ok_opens", libraryOkOpens);
@@ -660,7 +707,9 @@ final class Config {
                 dockBand, cinematicDots, cinematicWhiteFocus, wifiStatusColor, cinematicScrim, cinematicArt, wallpaperMoods, gamepadPassthrough,
                 consumeVolumeKeys, powerOnHome, homeLongPressHome, wifiStatusWarnings, topBarApps, showGreeting, headerWhite, clockWallpaper,
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
-                dateBelowClock, vpnPill, locale, powerOnHomeAlways);
+                dateBelowClock, vpnPill, locale, powerOnHomeAlways, statsBars, heroClock, heroClock && depthEffect, topButtons,
+                statsStorageBar, squareTiles && singleRow && dockRow, rowEndTiles && singleRow && dockRow, keepWatching,
+                heroClock && weather);
     }
 
     /**

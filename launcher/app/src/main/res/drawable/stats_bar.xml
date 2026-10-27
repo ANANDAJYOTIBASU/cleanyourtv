@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- stats_bars: a faint track and a white fill, both rounded; the fill scales with the level. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <corners android:radius="2dp" />
+            <solid android:color="#33FFFFFF" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <scale android:scaleWidth="100%" android:scaleGravity="left">
+            <shape android:shape="rectangle">
+                <corners android:radius="2dp" />
+                <solid android:color="#F2FFFFFF" />
+            </shape>
+        </scale>
+    </item>
+</layer-list>

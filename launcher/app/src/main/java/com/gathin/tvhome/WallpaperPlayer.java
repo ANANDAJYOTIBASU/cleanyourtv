@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.PorterDuff;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -48,6 +49,9 @@ final class WallpaperPlayer {
     private final int dimColor;
     /** The picture on screen, released once the next one has been drawn. */
     private Bitmap current;
+    /** depth_effect: the view over the hero clock and the shown picture's cut-out in it; null when off. */
+    private final ImageView depth;
+    private Bitmap currentDepth;
     private boolean active;
     private boolean closed;
     private boolean loading;
@@ -88,6 +92,7 @@ final class WallpaperPlayer {
         image = new ImageView(context);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        depth = config.depthEffect ? root.findViewById(R.id.depthLayer) : null;
         names = config.wallpaperCaptions && config.wallpaperEnabled && !files.isEmpty()
                 ? WallpaperCaptions.read(files.get(0).getParentFile()) : Collections.emptyMap();
         caption = names.isEmpty() ? null : makeCaption(context, root);
@@ -109,9 +114,10 @@ final class WallpaperPlayer {
         File first = WallpaperRotation.find(playable, previous);
         if (first == null) first = WallpaperRotation.pick(playable, previous, order, random);
         while (first != null) {
-            Bitmap bitmap = decode(first);
+            Bitmap bitmap = decode(first, false);
             if (bitmap != null) {
                 show(bitmap);
+                showDepth(decodeDepth(first));
                 // The picture covers the whole screen: the root's plain colour under it is overdraw.
                 root.setBackground(null);
                 displayed = first.getName();
@@ -144,6 +150,10 @@ final class WallpaperPlayer {
         // The renderer may still have a queued frame that references this hardware bitmap. Drop our references and
         // let Android reclaim its native buffer after rendering releases it instead of recycling it mid-frame.
         current = null;
+        if (depth != null) {
+            depth.setImageDrawable(null);
+            currentDepth = null;
+        }
         displayed = "";
         root.setBackgroundColor(backgroundColor);
     }
@@ -179,11 +189,13 @@ final class WallpaperPlayer {
         File next = selected;
         loading = true;
         decoder.execute(() -> {
-            Bitmap bitmap = decode(next);
+            Bitmap bitmap = decode(next, false);
+            Bitmap layer = bitmap == null ? null : decodeDepth(next);
             root.post(() -> {
                 loading = false;
                 if (closed || !active) {
                     if (bitmap != null) bitmap.recycle();
+                    if (layer != null) layer.recycle();
                     return;
                 }
                 if (bitmap == null) {
@@ -193,6 +205,7 @@ final class WallpaperPlayer {
                     return;
                 }
                 show(bitmap);
+                showDepth(layer);
                 displayed = next.getName();
                 showCaption(true);
                 if (!displayed.equals(previous) || changed == 0) {
@@ -269,7 +282,24 @@ final class WallpaperPlayer {
         if (old != null && old != bitmap) image.postDelayed(old::recycle, 500);
     }
 
-    private Bitmap decode(File file) {
+    /** Puts a picture's cut-out over the hero clock, or clears it for a picture that has none. */
+    private void showDepth(Bitmap layer) {
+        if (depth == null) return;
+        Bitmap old = currentDepth;
+        currentDepth = layer;
+        depth.setImageBitmap(layer);
+        depth.setVisibility(layer == null ? View.GONE : View.VISIBLE);
+        if (old != null && old != layer) depth.postDelayed(old::recycle, 500);
+    }
+
+    private Bitmap decodeDepth(File picture) {
+        if (depth == null) return null;
+        File layer = WallpaperRotation.depthFor(picture);
+        return layer.isFile() ? decode(layer, true) : null;
+    }
+
+    /** A layer keeps its transparency: always 32-bit, and the dim darkens only its opaque pixels, as on the picture. */
+    private Bitmap decode(File file, boolean layer) {
         try {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;
@@ -286,11 +316,13 @@ final class WallpaperPlayer {
                 options.inDensity = scale[0];
                 options.inTargetDensity = scale[1];
             }
-            options.inPreferredConfig = bitmapConfig;
+            options.inPreferredConfig = layer ? Bitmap.Config.ARGB_8888 : bitmapConfig;
             options.inMutable = dimColor != 0;
             Bitmap decoded = BitmapFactory.decodeFile(file.getPath(), options);
             if (decoded == null) return null;
-            if (dimColor != 0) new Canvas(decoded).drawColor(dimColor);
+            if (dimColor != 0) {
+                new Canvas(decoded).drawColor(dimColor, layer ? PorterDuff.Mode.SRC_ATOP : PorterDuff.Mode.SRC_OVER);
+            }
             // One copy in GPU memory instead of a software bitmap plus its texture; the decode stays off the UI
             // thread for rotations, and Home's return no longer uploads 4-8 MB to the GPU.
             Bitmap gpu = decoded.copy(Bitmap.Config.HARDWARE, false);

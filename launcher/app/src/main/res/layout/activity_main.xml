@@ -146,6 +146,84 @@
             android:visibility="gone" />
     </LinearLayout>
 
+    <!-- hero_clock: a large clock centred at the top, the date above it. Gone unless the switch is on. -->
+    <LinearLayout
+        android:id="@+id/heroClockBox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="35dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextClock
+                android:id="@+id/heroDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour="@string/date_format_home"
+                android:format24Hour="@string/date_format_home"
+                android:singleLine="true"
+                android:textColor="#E6FFFFFF"
+                android:textSize="22sp"
+                android:fontFamily="@string/font_regular"
+                android:letterSpacing="0.02"
+                android:shadowColor="#59000000"
+                android:shadowDy="1"
+                android:shadowRadius="10" />
+
+            <!-- weather: the current temperature after the date, filled in by Weather. -->
+            <TextView
+                android:id="@+id/heroWeather"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="22dp"
+                android:drawablePadding="8dp"
+                android:singleLine="true"
+                android:textColor="#E6FFFFFF"
+                android:textSize="22sp"
+                android:fontFamily="@string/font_regular"
+                android:letterSpacing="0.02"
+                android:shadowColor="#59000000"
+                android:shadowDy="1"
+                android:shadowRadius="10"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Antonio's tall ascender leaves empty room above the digits; the negative margin tucks it behind
+             the date. The colour's alpha is in the gradient MainActivity puts on the paint. -->
+        <TextClock
+            android:id="@+id/heroTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="-59dp"
+            android:format12Hour="h:mm"
+            android:format24Hour="HH:mm"
+            android:singleLine="true"
+            android:textColor="#FFFFFFFF"
+            android:textSize="216sp"
+            android:fontFamily="@font/antonio_clock"
+            android:includeFontPadding="false" />
+    </LinearLayout>
+
+    <!-- depth_effect: the wallpaper's foreground cut-out over the hero clock, under the header and the tiles.
+         WallpaperPlayer fills it with the shown picture's .depth.png. -->
+    <ImageView
+        android:id="@+id/depthLayer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:visibility="gone"
+        android:importantForAccessibility="no" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -311,6 +389,62 @@
                 android:focusable="false"
                 android:visibility="gone" />
 
+            <!-- stats_bars: memory and storage use as two thin bars left of the top buttons. -->
+            <LinearLayout
+                android:id="@+id/statsBars"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toStartOf="@+id/topButtons"
+                android:layout_alignTop="@+id/topButtons"
+                android:layout_alignBottom="@+id/topButtons"
+                android:layout_marginEnd="22dp"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:focusable="false"
+                android:importantForAccessibility="no"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/StatsBarLabel"
+                        android:text="@string/stats_bar_memory" />
+
+                    <ProgressBar
+                        android:id="@+id/statsMemoryBar"
+                        style="@style/StatsBar" />
+
+                    <TextView
+                        android:id="@+id/statsMemoryValue"
+                        style="@style/StatsBarValue" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/statsStorageRow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/StatsBarLabel"
+                        android:text="@string/stats_bar_storage" />
+
+                    <ProgressBar
+                        android:id="@+id/statsStorageBar"
+                        style="@style/StatsBar" />
+
+                    <TextView
+                        android:id="@+id/statsStorageValue"
+                        style="@style/StatsBarValue" />
+                </LinearLayout>
+            </LinearLayout>
+
             <LinearLayout
                 android:id="@+id/topButtons"
                 android:layout_width="wrap_content"
@@ -392,6 +526,50 @@
                 android:scrollbars="none"
                 android:descendantFocusability="afterDescendants" />
         </FrameLayout>
+    </LinearLayout>
+
+    <!-- keep_watching: Continue watching cards just above the dock; KeepWatching fills them, MainActivity places them
+         and narrows the row to the dock band's width. Cards scrolled past either end are clipped there. -->
+    <LinearLayout
+        android:id="@+id/keepWatchingBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="68dp"
+        android:clipToPadding="false"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/keep_watching"
+            android:textColor="#E6FFFFFF"
+            android:textSize="15sp"
+            android:fontFamily="@string/font_medium"
+            android:shadowColor="#80000000"
+            android:shadowDy="1"
+            android:shadowRadius="8" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/keepWatchingRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
     </LinearLayout>
 
     <!-- The single floating glass highlight that springs between tiles. -->

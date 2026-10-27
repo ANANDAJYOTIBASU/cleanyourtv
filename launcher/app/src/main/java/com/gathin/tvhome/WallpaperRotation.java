@@ -25,6 +25,7 @@ final class WallpaperRotation {
         Arrays.sort(entries, Comparator.comparing(File::getName));
         for (File entry : entries) {
             String name = entry.getName().toLowerCase(Locale.ROOT);
+            if (name.endsWith(DEPTH_SUFFIX)) continue;   // a picture's depth_effect cut-out, not a picture
             if (entry.isFile() && entry.length() > 0 && entry.length() <= 10 * 1024 * 1024
                     && (name.endsWith(".jpg") || name.endsWith(".jpeg")
                     || name.endsWith(".png") || name.endsWith(".webp"))) {
@@ -33,6 +34,15 @@ final class WallpaperRotation {
             }
         }
         return result;
+    }
+
+    static final String DEPTH_SUFFIX = ".depth.png";
+
+    /** The depth_effect cut-out next to a picture: 01-dusk.jpg has 01-dusk.depth.png. */
+    static File depthFor(File picture) {
+        String name = picture.getName();
+        int dot = name.lastIndexOf('.');
+        return new File(picture.getParentFile(), (dot > 0 ? name.substring(0, dot) : name) + DEPTH_SUFFIX);
     }
 
     static File find(List<File> images, String name) {

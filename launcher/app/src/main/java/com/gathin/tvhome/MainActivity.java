@@ -67,6 +67,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.PopupWindow;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -195,6 +196,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView raceKicker, raceHeadline, raceSessions;
     /** config.xml show_stats, overridable by a theme. Off: the line is gone and nothing is read. */
     private boolean showStats;
+    /** stats_bars: memory and storage as two bars by the top buttons; the line then stays off. */
+    private boolean statsBars;
+    private ProgressBar statsMemoryBar, statsStorageBar;
+    private TextView statsMemoryValue, statsStorageValue;
+    /** hero_clock: the large centred clock and date, in place of the top-left ones; null when off. */
+    private View heroClockBox;
+    /** weather: the temperature after the hero clock's date; null when off. */
+    private Weather weather;
+    /** keep_watching: the Continue watching row and its reader; null when off. */
+    private View keepWatchingBox;
+    private KeepWatching keepWatching;
+    /** The dock band's left and right edges in the grid's coordinates, which the Keep watching row lines up with. */
+    private float dockBandLeft = Float.NaN, dockBandRight = Float.NaN;
     private boolean shamsi;
     /** greeting_name: said after the greeting, which is shown in capitals. */
     private String greetingName = "";
@@ -494,7 +508,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         raceKicker = findViewById(R.id.raceKicker);
         raceHeadline = findViewById(R.id.raceHeadline);
         raceSessions = findViewById(R.id.raceSessions);
-        showStats = cfg.showStats;
+        showStats = cfg.showStats && !cfg.statsBars;
+        statsBars = cfg.statsBars;
+        if (statsBars) {
+            findViewById(R.id.statsBars).setVisibility(View.VISIBLE);
+            statsMemoryBar = findViewById(R.id.statsMemoryBar);
+            statsStorageBar = findViewById(R.id.statsStorageBar);
+            statsMemoryValue = findViewById(R.id.statsMemoryValue);
+            statsStorageValue = findViewById(R.id.statsStorageValue);
+            if (!cfg.statsStorageBar) findViewById(R.id.statsStorageRow).setVisibility(View.GONE);
+            // The header's left side stops at the bars instead of running under them.
+            ((RelativeLayout.LayoutParams) clockBlock.getLayoutParams()).addRule(RelativeLayout.START_OF, R.id.statsBars);
+        }
         shamsi = cfg.shamsiDate;
         lunarDate = findViewById(R.id.lunarDate);
         lunar = cfg.lunarDate;
@@ -502,6 +527,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (lunar) lunarDate.setVisibility(View.VISIBLE);
         greetingName = cfg.greetingName;
         if (cfg.dateBelowClock) moveDateBelowClock();
+        if (cfg.heroClock) {
+            // The large clock and date replace the top-left ones; the greeting stays.
+            ((View) findViewById(R.id.clock).getParent()).setVisibility(View.GONE);
+            ((View) findViewById(R.id.date).getParent()).setVisibility(View.GONE);
+            heroClockBox = findViewById(R.id.heroClockBox);
+            heroClockBox.setVisibility(View.VISIBLE);
+            findViewById(R.id.heroTime).addOnLayoutChangeListener(
+                    (v, l, t, r, b, ol, ot, or, ob) -> shadeHeroTime((TextView) v));
+            if (cfg.weather) weather = new Weather(this, findViewById(R.id.heroWeather));
+        }
         if (shamsi) {
             shamsiDate.setVisibility(View.VISIBLE);
             TextView date = findViewById(R.id.date);
@@ -588,8 +623,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
-        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding, cfg.dockBand,
-                singleRow, cfg.dockBandAll));
+        DockDecoration dockDecoration = dockRow ? new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames,
+                cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding, cfg.dockBand, singleRow, cfg.dockBandAll) : null;
+        if (dockDecoration != null) grid.addItemDecoration(dockDecoration);
         if (cfg.fadeRows) TopFade.attach(grid, 48 * density);
         // Reduced motion: the tiles are simply there, with no entrance (reloadApps skips it there too).
         if (animations && !reducedMotion) {
@@ -602,7 +638,28 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         Order savedOrder = Order.load(Order.file(this));
         adapter.setSavedOrder(Order.ranks(savedOrder, dockApps), Order.docked(savedOrder, dockApps));
         grid.setAdapter(adapter);
+        if (cfg.keepWatching) {
+            keepWatchingBox = findViewById(R.id.keepWatchingBox);
+            keepWatching = new KeepWatching(this, keepWatchingBox, new KeepWatching.Host() {
+                @Override
+                public void onKeepWatchingFocused() {
+                    hideGlass();
+                    hideHero();
+                }
 
+                @Override
+                public void onKeepWatchingDown() {
+                    if (adapter.appCount() > 0) focusTile(Math.max(0, Math.min(lastFocused, adapter.appCount() - 1)));
+                }
+            });
+            keepWatchingBox.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> positionKeepWatching());
+            grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> positionKeepWatching());
+            if (dockDecoration != null) dockDecoration.setBandListener((left, right) -> {
+                dockBandLeft = left;
+                dockBandRight = right;
+                keepWatchingBox.post(this::positionKeepWatching);
+            });
+        }
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
         // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
         int rowsBelowDock = cfg.rowsBelowDock;
@@ -770,6 +827,33 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             makeIconOnly((TextView) btnSettings);
         }
         if (cfg.iconOnlyInputs) makeIconOnly((TextView) btnInputs);
+        if (heroClockBox != null) {
+            // Only the greeting is left at the top left, too short to hang the buttons from: they go to the top and
+            // the greeting is padded down to their middle.
+            LinearLayout topButtons = findViewById(R.id.topButtons);
+            RelativeLayout.LayoutParams tlp = (RelativeLayout.LayoutParams) topButtons.getLayoutParams();
+            tlp.removeRule(RelativeLayout.ALIGN_BOTTOM);
+            tlp.removeRule(RelativeLayout.ALIGN_TOP);
+            tlp.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+            tlp.bottomMargin = 0;
+            topButtons.setLayoutParams(tlp);
+            clockBlock.setPadding(0, Math.round(13 * density), 0, 0);
+        }
+        if (!cfg.topButtons) {
+            // No buttons: the remote's Input and Settings buttons still work, and the row's "..." tile or Launcher settings
+            // has the rest. The bars take the buttons' corner, at their height.
+            findViewById(R.id.topButtons).setVisibility(View.GONE);
+            View bars = findViewById(R.id.statsBars);
+            RelativeLayout.LayoutParams blp = (RelativeLayout.LayoutParams) bars.getLayoutParams();
+            blp.removeRule(RelativeLayout.START_OF);
+            blp.removeRule(RelativeLayout.ALIGN_TOP);
+            blp.removeRule(RelativeLayout.ALIGN_BOTTOM);
+            blp.addRule(RelativeLayout.ALIGN_PARENT_END);
+            blp.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+            blp.height = Math.round(42 * density);
+            blp.setMarginEnd(0);
+            bars.setLayoutParams(blp);
+        }
         btnSettings.setOnLongClickListener(v -> {
             showSettingsMenu();
             return true;
@@ -982,7 +1066,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             updateInputsButton();
             pillsShown = true;
         }
-        if (showStats) startStats();
+        if (showStats || statsBars) startStats();
+        if (keepWatching != null) keepWatching.refresh();
+        if (weather != null) weather.refresh();
         sky.update();
         wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
@@ -1160,6 +1246,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
         stopStats();
+        if (keepWatching != null) keepWatching.stop();
+        if (weather != null) weather.stop();
         if (diya != null) diya.stop();
         cancelPendingFocusScroll();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
@@ -1215,6 +1303,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onDestroy();
         unregisterReceiver(packageReceiver);
         wallpaperPlayer.close();
+        if (keepWatching != null) keepWatching.close();
+        if (weather != null) weather.close();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.unregisterCallback(inputCallback);
@@ -2053,7 +2143,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private void startStats() {
         if (statsThread != null) return;
-        stats.setVisibility(View.VISIBLE);
+        if (showStats) stats.setVisibility(View.VISIBLE);
         cpuTotalPrev = -1;
         idlePrev = -1;
         procStatDead = false;
@@ -2067,9 +2157,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             @Override
             public void run() {
                 if (statsBg != bg) return;
-                String line = readStatsLine();
+                String line = showStats ? readStatsLine() : null;
+                int[] used = statsBars ? readStatsUse() : null;
                 handler.post(() -> {
-                    if (showStats && stats != null && statsBg == bg) stats.setText(line);
+                    if (statsBg != bg) return;
+                    if (line != null && stats != null) stats.setText(line);
+                    if (used != null) {
+                        showStatsBar(statsMemoryBar, statsMemoryValue, used[0]);
+                        showStatsBar(statsStorageBar, statsStorageValue, used[1]);
+                    }
                 });
                 if (statsBg == bg) bg.postDelayed(this, STATS_MS);
             }
@@ -2226,6 +2322,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
+    /** stats_bars: {memory, storage} in use, in percent, -1 for one that cannot be read. Runs off the main thread. */
+    private int[] readStatsUse() {
+        long[] mem = memUsedOfTotalMb();
+        File data = Environment.getDataDirectory();
+        long total = data.getTotalSpace();
+        return new int[]{mem == null ? -1 : percentOf(mem[0], mem[1]),
+                total <= 0 ? -1 : percentOf(total - data.getFreeSpace(), total)};
+    }
+
+    private static int percentOf(long part, long whole) {
+        return (int) Math.max(0, Math.min(100, Math.round(part * 100.0 / whole)));
+    }
+
+    private void showStatsBar(ProgressBar bar, TextView value, int used) {
+        bar.setProgress(Math.max(0, used));
+        value.setText(used < 0 ? "" : getString(R.string.stats_bar_percent, used));
+    }
+
     private static String formatGb(Resources res, long bytes) {
         if (bytes <= 0) return "";
         double gb = bytes / (1024.0 * 1024 * 1024);
@@ -2371,6 +2485,41 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         focusTile(Math.min(lastRow + lastFocused % COLUMNS, adapter.appCount() - 1));
     }
 
+    @Override public void onRowEndLongPress() {
+        startActivityForResult(new Intent(this, LauncherSettingsActivity.class), LAUNCHER_SETTINGS_REQUEST);
+    }
+
+    /** keep_watching: the row sits just above the dock's band, wherever the grid has put the dock, and as wide as the band. */
+    private void positionKeepWatching() {
+        if (keepWatchingBox == null || keepWatchingBox.getVisibility() != View.VISIBLE || keepWatchingBox.getHeight() == 0) return;
+        Rect r = new Rect(0, 0, grid.getWidth(), grid.getHeight());
+        root.offsetDescendantRectToMyCoords(grid, r);
+        keepWatchingBox.setY(r.top + grid.getPaddingTop() - keepWatchingBox.getHeight() - 16 * density);
+        if (Float.isNaN(dockBandLeft)) return;
+        int left = Math.round(r.left + dockBandLeft) - keepWatchingBox.getLeft();
+        int right = keepWatchingBox.getRight() - Math.round(r.left + dockBandRight);
+        if (left != keepWatchingBox.getPaddingLeft() || right != keepWatchingBox.getPaddingRight()) {
+            keepWatchingBox.setPadding(left, keepWatchingBox.getPaddingTop(), right, keepWatchingBox.getPaddingBottom());
+        }
+        keepWatching.fit(keepWatchingBox.getWidth() - left - right);
+    }
+
+    /**
+     * hero_clock: the digits fade from a lavender white at the top to a see-through pink at the baseline, so the
+     * wallpaper shows through them. The gradient spans the digits themselves, in the text layout's coordinates.
+     */
+    private static void shadeHeroTime(TextView time) {
+        android.text.Layout layout = time.getLayout();
+        if (layout == null) return;
+        TextPaint paint = time.getPaint();
+        Rect digits = new Rect();
+        paint.getTextBounds("0123456789", 0, 10, digits);
+        float baseline = layout.getLineBaseline(0);
+        paint.setShader(new LinearGradient(0, baseline + digits.top, 0, baseline + digits.bottom,
+                new int[] {0x9EF4F1FF, 0x80EEDDF7, 0x5CFFB4D2}, new float[] {0f, 0.55f, 1f}, Shader.TileMode.CLAMP));
+        time.invalidate();
+    }
+
     private void focusLibrary() {
         cancelPendingFocusScroll();
         int position = adapter.appCount();
@@ -2467,6 +2616,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void updateClockVisibility() {
         boolean valid = System.currentTimeMillis() >= TIME_VALID_AFTER_MS;
         clockBlock.setVisibility(valid ? View.VISIBLE : View.INVISIBLE);
+        if (heroClockBox != null) heroClockBox.setVisibility(valid ? View.VISIBLE : View.INVISIBLE);
         handler.removeCallbacks(clockCheck);
         if (valid) {
             updateGreeting();

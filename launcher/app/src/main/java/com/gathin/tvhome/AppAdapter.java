@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -14,8 +15,10 @@ import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
@@ -61,10 +64,12 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         /** Hold OK on a tile: the activity shows the tile menu (move, remove from Home, app info). */
         void onTileLongPress(int position, View card);
         void onLibraryUp();
+        /** Hold OK on the row-end Settings or "..." tile. */
+        void onRowEndLongPress();
     }
 
     static final class Entry {
-        static final int APP = 0, HOME_SETTINGS = 1, CARD = 2, EMPTY = 3;
+        static final int APP = 0, HOME_SETTINGS = 1, CARD = 2, EMPTY = 3, SETTINGS_TILE = 4, MORE_TILE = 5;
 
         final int kind;
         final String label;
@@ -78,6 +83,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         int ambient;
         /** uniform_tiles card fill, top and bottom colour; null until sampled from the icon. */
         int[] backdrop;
+        /** square_tiles: the adaptive icon's layers drawn edge to edge; null for an icon that has none. */
+        Drawable fullBleed;
 
         Entry(String label, ComponentName component, Drawable banner, Drawable icon) {
             this(APP, label, component, banner, icon, null, 0);
@@ -98,21 +105,25 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     static final float FOCUS_SCALE = 1.10f;
     /** Design size of a tile (dp); tiles shrink from here when the columns don't fit, see tileWidthPx. */
     static final float DESIGN_W_DP = 180f, DESIGN_H_DP = 101f;
+    /** square_tiles, set once from the config by the adapter: the sizes and corners below depend on it. */
+    static boolean squareTiles;
+    /** square_tiles: corner radius as a share of the tile's width, as on a phone's app icons. */
+    static final float SQUARE_CORNER = 0.22f;
 
     /**
      * Tile width for a grid of this inner width: the cell minus room for the focus zoom and the glass
      * highlight, capped at the design size so 4 columns on a 1080p TV look exactly as before.
      */
     static int tileWidthPx(int innerWidthPx, int columns, float density) {
-        int design = Math.round(DESIGN_W_DP * density);
+        int design = Math.round((squareTiles ? DESIGN_H_DP : DESIGN_W_DP) * density);
         if (innerWidthPx <= 0 || columns <= 0) return design;
         int cell = innerWidthPx / columns;
         int fit = (int) ((cell - 12 * density) / FOCUS_SCALE);
-        return Math.max(Math.round(80 * density), Math.min(design, fit));
+        return Math.max(Math.round((squareTiles ? 40 : 80) * density), Math.min(design, fit));
     }
 
     static int tileHeightPx(int tileWidthPx) {
-        return Math.round(tileWidthPx * DESIGN_H_DP / DESIGN_W_DP);
+        return squareTiles ? tileWidthPx : Math.round(tileWidthPx * DESIGN_H_DP / DESIGN_W_DP);
     }
 
     /** Height of one grid item: the tile, the name label under it and the item's own padding. */
@@ -154,7 +165,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     static int tileWidthPx(int innerWidthPx, int gridHeightPx, int columns, int rowsBelowDock, boolean dockTitle,
                            boolean dockRow, float density) {
         int w = tileWidthPx(innerWidthPx, columns, density);
-        if (gridHeightPx <= 0 || rowsBelowDock <= 0) return w;
+        if (gridHeightPx <= 0 || rowsBelowDock <= 0 || squareTiles) return w;
         float reserved = (dockRow ? DOCK_EXTRA_DP + BOTTOM_ROOM_DP + (dockTitle ? TITLE_ROOM_DP : 0)
                 : TOP_ROOM_DP + COMPACT_BOTTOM_ROOM_DP) * density;
         float perItem = (gridHeightPx - reserved) / (rowsBelowDock + 1);
@@ -216,6 +227,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final Map<String, String> appLabels, appBanners;
     /** Every app tile is its icon on a card tinted from that icon, never its banner (config.xml, uniform_tiles). */
     private final boolean uniformTiles;
+    /** row_end_tiles: the Settings and "..." tiles after the last app. */
+    private final boolean rowEndTiles;
     private final List<Entry> items = new ArrayList<>();
 
     AppAdapter(Context ctx, TileListener listener, int dockSize, Config cfg) {
@@ -229,7 +242,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.animations = cfg.animations;
         this.advancedEffects = cfg.animations && cfg.advancedEffects;
         this.showHomeSettings = cfg.showHomeSettingsShortcut;
-        this.showLibrary = LibraryApps.showPill(cfg.appLibrary, cfg.libraryButton, cfg.showLibraryPill);
+        // row_end_tiles: the "..." tile opens the library, so the pill would only repeat it.
+        this.showLibrary = LibraryApps.showPill(cfg.appLibrary, cfg.libraryButton, cfg.showLibraryPill) && !cfg.rowEndTiles;
         this.reducedMotion = cfg.reducedMotion;
         this.focusOvershoot = cfg.focusOvershoot;
         this.rowsBelowDock = cfg.rowsBelowDock;
@@ -242,7 +256,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.tileMenu = cfg.tileMenu;
         this.appLabels = cfg.appLabels;
         this.appBanners = cfg.appBanners;
-        this.uniformTiles = cfg.uniformTiles;
+        squareTiles = cfg.squareTiles;
+        this.uniformTiles = cfg.uniformTiles || cfg.squareTiles;
+        this.rowEndTiles = cfg.rowEndTiles;
         // Tiles keep their identity across reload(), so a focused tile stays on its app instead of
         // its view being rebound to whatever app now sits in that slot.
         setHasStableIds(true);
@@ -334,6 +350,12 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         for (int i = 0; i < emptySlots; i++) {
             fresh.add(docked + i, new Entry(Entry.EMPTY, "", new ComponentName(ctx, "empty-dock-slot-" + i),
                     null, null, null, 0));
+        }
+        if (rowEndTiles) {
+            fresh.add(new Entry(Entry.SETTINGS_TILE, ctx.getString(R.string.settings),
+                    new ComponentName(ctx, "row-end-settings"), null, ctx.getDrawable(R.drawable.ic_settings), null, 0));
+            fresh.add(new Entry(Entry.MORE_TILE, ctx.getString(R.string.more_apps),
+                    new ComponentName(ctx, "row-end-more"), null, ctx.getDrawable(R.drawable.ic_more), null, 0));
         }
         items.clear();
         items.addAll(fresh);
@@ -458,6 +480,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.card.setVisibility(View.VISIBLE);
         h.card.setFocusable(true);
         h.name.setText(e.name);
+        if (e.kind == Entry.SETTINGS_TILE || e.kind == Entry.MORE_TILE) {
+            bindRowEndTile(h, e);
+            return;
+        }
         // The dock has no labels, unless always_show_names asks for them (DockDecoration then makes room in the band).
         // In a single row every tile is the dock's kind: the big title above names it.
         boolean dockKind = dockRow && (singleRow || position < dockSize);
@@ -485,11 +511,15 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         } else {
             h.banner.setImageDrawable(null);
             h.banner.setVisibility(View.GONE);
+            h.icon.setImageTintList(null);
             h.icon.setImageDrawable(e.icon);
             h.icon.setVisibility(View.VISIBLE);
             h.label.setText(e.label);
             h.label.setVisibility(uniformTiles ? View.GONE : View.VISIBLE);
+            if (squareTiles) fitSquareIcon(h, e);
+            else h.restoreIconSize();
         }
+        h.card.setContentDescription(null);
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
             if (tileMenu) {
@@ -509,6 +539,17 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     /** Opens the tile's activity by explicit component, with no extras: a card can name nothing else. */
     private void launch(Entry e) {
+        if (e.kind == Entry.SETTINGS_TILE) {
+            try {
+                ctx.startActivity(SystemSettings.intent(ctx, Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (ActivityNotFoundException ignored) {
+            }
+            return;
+        }
+        if (e.kind == Entry.MORE_TILE) {
+            listener.onLibraryRequested();
+            return;
+        }
         if (e.kind == Entry.HOME_SETTINGS) {
             ctx.startActivity(new Intent(ctx, HomeSettingsActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -584,10 +625,12 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         return emptySlots > 0;
     }
 
-    /** Tiles that can be moved: everything but the "Default home" tile, which always stays last. */
+    /** Tiles that can be moved: everything but the tiles that always stay last (Default home, Settings, "..."). */
     int movableCount() {
         int n = items.size();
-        return n > 0 && items.get(n - 1).kind == Entry.HOME_SETTINGS ? n - 1 : n;
+        while (n > 0 && items.get(n - 1).kind != Entry.APP && items.get(n - 1).kind != Entry.CARD
+                && items.get(n - 1).kind != Entry.EMPTY) n--;
+        return n;
     }
 
     /** Keys of the movable tiles in their current order, for Order (empty dock slots are not tiles). */
@@ -856,7 +899,70 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     /** Corner radius for a tile of this width: 16dp at the design width, proportionally less when smaller. */
     static float cornerRadius(int tileWidthPx, float density) {
+        if (squareTiles) return tileWidthPx * SQUARE_CORNER;
         return 16f * density * Math.min(1f, tileWidthPx / (DESIGN_W_DP * density));
+    }
+
+    /**
+     * square_tiles: an adaptive icon fills the whole tile (its layers are 108 units with the visible 72 in the middle,
+     * so they are drawn at 150 %), clipped by the tile's rounded corners; any other icon sits at 70 % on its tint.
+     */
+    private void fitSquareIcon(Holder h, Entry e) {
+        int size = h.card.getLayoutParams().height;
+        if (e.fullBleed == null && e.icon instanceof AdaptiveIconDrawable) {
+            AdaptiveIconDrawable adaptive = (AdaptiveIconDrawable) e.icon;
+            List<Drawable> layers = new ArrayList<>();
+            if (adaptive.getBackground() != null) layers.add(adaptive.getBackground());
+            if (adaptive.getForeground() != null) layers.add(adaptive.getForeground());
+            if (!layers.isEmpty()) {
+                LayerDrawable bleed = new LayerDrawable(layers.toArray(new Drawable[0]));
+                int inset = -size / 4;
+                for (int i = 0; i < layers.size(); i++) bleed.setLayerInset(i, inset, inset, inset, inset);
+                e.fullBleed = bleed;
+            }
+        }
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) h.icon.getLayoutParams();
+        int side = e.fullBleed != null ? size : Math.round(size * 0.7f);
+        if (lp.width != side) {
+            lp.width = lp.height = side;
+            h.icon.setLayoutParams(lp);
+        }
+        h.icon.setScaleType(e.fullBleed != null ? ImageView.ScaleType.FIT_XY : ImageView.ScaleType.FIT_CENTER);
+        if (e.fullBleed != null) h.icon.setImageDrawable(e.fullBleed);
+    }
+
+    /** The Settings and "..." tiles: a white glyph on frosted glass, in the shape of the app tiles. */
+    private void bindRowEndTile(Holder h, Entry e) {
+        float density = ctx.getResources().getDisplayMetrics().density;
+        int size = h.card.getLayoutParams().height;
+        GradientDrawable glass = new GradientDrawable();
+        glass.setColor(0x24FFFFFF);
+        glass.setStroke(Math.max(1, Math.round(density)), 0x33FFFFFF);
+        glass.setCornerRadius(cornerRadius(h.card.getLayoutParams().width, density));
+        h.card.setBackground(glass);
+        h.card.setScaleX(h.card.isFocused() && animations ? focusScale() : 1f);
+        h.card.setScaleY(h.card.isFocused() && animations ? focusScale() : 1f);
+        h.name.setVisibility(View.INVISIBLE);
+        h.banner.setImageDrawable(null);
+        h.banner.setVisibility(View.GONE);
+        h.label.setVisibility(View.GONE);
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) h.icon.getLayoutParams();
+        int side = Math.round(size * 0.4f);
+        if (lp.width != side) {
+            lp.width = lp.height = side;
+            lp.bottomMargin = 0;
+            h.icon.setLayoutParams(lp);
+        }
+        h.icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        h.icon.setImageDrawable(e.icon);
+        h.icon.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+        h.icon.setVisibility(View.VISIBLE);
+        h.card.setContentDescription(e.label);
+        h.card.setOnClickListener(v -> launch(e));
+        h.card.setOnLongClickListener(v -> {
+            listener.onRowEndLongPress();
+            return true;
+        });
     }
 
     static final class Holder extends RecyclerView.ViewHolder {
@@ -873,6 +979,18 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         /** Alpha of the name while the tile is not focused (always_show_names). */
         final float restNameAlpha;
         final boolean overshoot;
+        /** The icon's size and margin as onCreateViewHolder set them, for a view a row-end tile resized. */
+        private final int iconW, iconH, iconBottom;
+
+        void restoreIconSize() {
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) icon.getLayoutParams();
+            if (lp.width == iconW && lp.height == iconH && lp.bottomMargin == iconBottom) return;
+            lp.width = iconW;
+            lp.height = iconH;
+            lp.bottomMargin = iconBottom;
+            icon.setLayoutParams(lp);
+            icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        }
 
         Holder(View v, TileListener listener, boolean animations, boolean advancedEffects,
                boolean reducedMotion, float restNameAlpha, boolean overshoot) {
@@ -881,6 +999,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             cardBackground = card.getBackground();
             banner = v.findViewById(R.id.banner);
             icon = v.findViewById(R.id.icon);
+            FrameLayout.LayoutParams iconLp = (FrameLayout.LayoutParams) icon.getLayoutParams();
+            iconW = iconLp.width;
+            iconH = iconLp.height;
+            iconBottom = iconLp.bottomMargin;
             label = v.findViewById(R.id.label);
             name = v.findViewById(R.id.name);
             this.animations = animations;
